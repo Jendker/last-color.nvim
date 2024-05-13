@@ -9,6 +9,14 @@ local open_cache_file = function(mode)
   return uv.fs_open(cache_file, mode, flags)
 end
 
+local split_string = function(input, delimiter)
+  local result = {}
+  for part in string.gmatch(input, "([^" .. delimiter .. "]+)") do
+    table.insert(result, part)
+  end
+  return result
+end
+
 local read_cache_file = function()
   local fd, err_name, err_msg = open_cache_file('r')
   if not fd then
@@ -23,21 +31,34 @@ local read_cache_file = function()
   local data = assert(uv.fs_read(fd, stat.size, -1))
   assert(uv.fs_close(fd))
 
-  local colorscheme = tostring(data):gsub('[\n\r]', '')
-  return colorscheme
+  local split = split_string(tostring(data), "\n")
+  if #split == 1 then
+    local colorscheme = split[1]
+    return colorscheme, nil
+  elseif #split == 2 then
+    local colorscheme = split[1]
+    local background = split[2]
+    return colorscheme, background
+  else
+    return nil, nil
+  end
 end
 
 local write_cache_file = function(colorscheme)
   local fd = assert(open_cache_file('w'))
-  assert(uv.fs_write(fd, string.format('%s\n', colorscheme), -1))
+  assert(uv.fs_write(fd, string.format('%s\n%s\n', colorscheme, vim.o.background), -1))
   assert(uv.fs_close(fd))
 end
 
 --- Read the cached colorscheme from disk.
---- @return string|nil colorscheme
+--- @return string|nil, string|nil colorscheme_background
 M.recall = function()
-  local ok, result = pcall(read_cache_file)
-  return ok and result or nil
+  local ok, theme, background = pcall(read_cache_file)
+  if not ok then
+    return nil, nil
+  else
+    return theme, background
+  end
 end
 
 --- Creates the autocommand which saves the last ':colorscheme' to disk, along
